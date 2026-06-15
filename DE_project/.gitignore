@@ -1,0 +1,24 @@
+.env
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+
+
+
+# pipeline outputs 
+part1_batch/output/*
+part2_realtime/output/*
+part2_realtime/archive/*
+!**/.gitkeep
+
+# Airflow local files 
+.airflow/
+airflow.db
+airflow.cfg
+logs/
+standalone_admin_password.txt
+simple_auth_manager_passwords.json.generated
+
+# the big Kaggle file 
+part1_batch/data/Nashville_housing_data_2013_2016*.csv
