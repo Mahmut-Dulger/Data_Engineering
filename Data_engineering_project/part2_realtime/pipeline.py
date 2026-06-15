@@ -27,10 +27,22 @@ def process_file(path):
     log.info("--- Part 2 pipeline start: %s ---", os.path.basename(path))
     try:
         df = reader.read(path)
-        df = validator.validate(df)
-        df = processor.process(df)
-        df = validator.backup_check(df)
-        out = writer.write(df, path)
+        rows_in = len(df)
+
+        clean, rejected = validator.validate(df)
+        writer.write_rejected(rejected, path)    # keep the bad rows for inspection
+
+        processed = processor.process(clean)
+        processed = validator.backup_check(processed)
+        out = writer.write(processed, path)
+
+        writer.write_report(path, {
+            "source_file": os.path.basename(path),
+            "rows_in": rows_in,
+            "rows_rejected": len(rejected),
+            "rows_out": len(processed),
+            "output_file": os.path.basename(out),
+        })
         _move(path, config.ARCHIVE_DIR)
         log.info("--- Done -> %s ---", out)
         return out

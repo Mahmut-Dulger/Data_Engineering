@@ -1,5 +1,6 @@
 pandas
 numpy
+pyarrow               # for the parquet output
 openpyxl              # needed to read .xlsx files in Part 2
 apache-airflow        # for the DAGs (optional - pipelines run without it)
 azure-storage-blob    # for uploading to Azure Blob Storage

@@ -11,13 +11,20 @@ except ImportError:
 log = logging.getLogger("part1.validator")
 
 
+def _flag(reason, mask, text):
+    # set the reason on rows that just failed, but keep the first reason found
+    newly = mask & (reason == "")
+    reason[newly] = text
+
+
 def validate(df):
-    # Drop rows where a value is clearly wrong (bad type or out of range).
-    # Missing values stay for now, the processor handles them.
+    # Returns (clean rows, rejected rows). A row is rejected if a value is clearly
+    # wrong (bad type or out of range). Missing values are kept, the processor
+    # deals with those. Rejected rows get a "reject_reason" column.
     if df.empty:
         raise ValueError("Input file has no rows")
 
-    bad = pd.Series(False, index=df.index)
+    reason = pd.Series("", index=df.index)
     for col, rule in config.RULES.items():
         if col not in df.columns:
             raise ValueError(f"Expected column missing from file: {col}")
@@ -28,14 +35,20 @@ def validate(df):
             values = pd.to_datetime(df[col], errors="coerce")
 
         present = df[col].notna() & (df[col].astype(str).str.strip() != "")
-        bad |= present & values.isna()                  # value there but couldn't be parsed
+        _flag(reason, present & values.isna(), f"{col}: not a valid {rule['type']}")
         if "min" in rule:
-            bad |= present & (values < rule["min"])
+            _flag(reason, present & (values < rule["min"]), f"{col}: below minimum")
         if "max" in rule:
-            bad |= present & (values > rule["max"])
+            _flag(reason, present & (values > rule["max"]), f"{col}: above maximum")
 
-    log.info("Validation: dropping %d row(s) with invalid values", int(bad.sum()))
-    return df[~bad].copy()
+    bad = reason != ""
+    log.info("Validation: %d row(s) ok, %d rejected", int((~bad).sum()), int(bad.sum()))
+
+    clean = df[~bad].copy()
+    rejected = df[bad].copy()
+    if len(rejected):
+        rejected["reject_reason"] = reason[bad]
+    return clean, rejected
 
 
 def backup_check(df):

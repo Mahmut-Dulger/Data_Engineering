@@ -12,9 +12,16 @@ except ImportError:
 log = logging.getLogger("part2.validator")
 
 
+def _flag(reason, mask, text):
+    # set the reason on rows that just failed, but keep the first reason found
+    newly = mask & (reason == "")
+    reason[newly] = text
+
+
 def validate(df):
+    # Returns (clean rows, rejected rows). Rejected rows get a "reject_reason" column.
     df = df.replace(r"^\s*$", np.nan, regex=True)
-    bad = pd.Series(False, index=df.index)
+    reason = pd.Series("", index=df.index)
 
     for col, rule in config.RULES.items():
         if col not in df.columns:
@@ -22,27 +29,35 @@ def validate(df):
 
         empty = df[col].isna()
         if rule.get("required"):
-            bad |= empty                                   # required but empty
+            _flag(reason, empty, f"{col}: required value missing")
 
         present = ~empty
         if rule["type"] == "number":
             values = pd.to_numeric(df[col], errors="coerce")
-            bad |= present & values.isna()                 # not a number
+            _flag(reason, present & values.isna(), f"{col}: not a number")
             if "min" in rule:
-                bad |= present & (values < rule["min"])
+                _flag(reason, present & (values < rule["min"]), f"{col}: below minimum")
             if "max" in rule:
-                bad |= present & (values > rule["max"])
+                _flag(reason, present & (values > rule["max"]), f"{col}: above maximum")
         elif rule["type"] == "date":
-            bad |= present & pd.to_datetime(df[col], errors="coerce").isna()
+            _flag(reason, present & pd.to_datetime(df[col], errors="coerce").isna(),
+                  f"{col}: invalid date")
         else:  # text
             if "pattern" in rule:
                 ok = df[col].astype(str).str.fullmatch(rule["pattern"])
-                bad |= present & ~ok.fillna(False)
+                _flag(reason, present & ~ok.fillna(False), f"{col}: wrong format")
             if "allowed" in rule:
-                bad |= present & ~df[col].isin(rule["allowed"])
+                _flag(reason, present & ~df[col].isin(rule["allowed"]),
+                      f"{col}: not an allowed value")
 
-    log.info("Validation: dropping %d invalid row(s)", int(bad.sum()))
-    return df[~bad].copy()
+    bad = reason != ""
+    log.info("Validation: %d row(s) ok, %d rejected", int((~bad).sum()), int(bad.sum()))
+
+    clean = df[~bad].copy()
+    rejected = df[bad].copy()
+    if len(rejected):
+        rejected["reject_reason"] = reason[bad]
+    return clean, rejected
 
 
 def backup_check(df):

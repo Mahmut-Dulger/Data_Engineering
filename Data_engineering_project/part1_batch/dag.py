@@ -27,8 +27,9 @@ def step_read(**_):
     return p
 
 def step_validate(ti, **_):
-    df = validator.validate(pd.read_csv(ti.xcom_pull(task_ids="read"), dtype=str))
-    p = os.path.join(TMP, "validated.csv"); df.to_csv(p, index=False)
+    clean, rejected = validator.validate(pd.read_csv(ti.xcom_pull(task_ids="read"), dtype=str))
+    writer.write_rejected(rejected)          # keep the bad rows for inspection
+    p = os.path.join(TMP, "validated.csv"); clean.to_csv(p, index=False)
     return p
 
 def step_process(ti, **_):
@@ -42,7 +43,15 @@ def step_backup_check(ti, **_):
     return p
 
 def step_write(ti, **_):
-    return writer.write(pd.read_csv(ti.xcom_pull(task_ids="backup_check")))
+    final = pd.read_csv(ti.xcom_pull(task_ids="backup_check"))
+    raw = pd.read_csv(ti.xcom_pull(task_ids="read"), dtype=str)
+    path = writer.write(final)
+    writer.write_report({
+        "rows_in": len(raw),
+        "rows_out": len(final),
+        "output_file": os.path.basename(path),
+    })
+    return path
 
 
 with DAG(
